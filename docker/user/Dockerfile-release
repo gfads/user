@@ -29,7 +29,7 @@ RUN	addgroup -g ${SERVICE_GID} ${SERVICE_GROUP} && \
 	adduser -g "${SERVICE_NAME} user" -D -H -G ${SERVICE_GROUP} -s /sbin/nologin -u ${SERVICE_UID} ${SERVICE_USER} && \
 	apk add --update libcap
 
-ENV HATEAOS user
+ENV HATEAOS user:8080
 ENV USER_DATABASE mongodb
 ENV MONGO_HOST user-db
 
