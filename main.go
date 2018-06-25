@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	corelog "log"
@@ -17,15 +16,12 @@ import (
 	"github.com/microservices-demo/user/api"
 	"github.com/microservices-demo/user/db"
 	"github.com/microservices-demo/user/db/mongodb"
-	stdopentracing "github.com/opentracing/opentracing-go"
-	zipkin "github.com/openzipkin/zipkin-go-opentracing"
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
 	commonMiddleware "github.com/weaveworks/common/middleware"
 )
 
 var (
 	port string
-	zip  string
 )
 
 var (
@@ -36,13 +32,8 @@ var (
 	}, []string{"method", "path", "status_code", "isWS"})
 )
 
-const (
-	ServiceName = "user"
-)
-
 func init() {
 	stdprometheus.MustRegister(HTTPLatency)
-	flag.StringVar(&zip, "zipkin", os.Getenv("ZIPKIN"), "Zipkin address")
 	flag.StringVar(&port, "port", "8084", "Port on which to run")
 	db.Register("mongodb", &mongodb.Mongo{})
 }
@@ -67,35 +58,8 @@ func main() {
 		logger.Log("err", err)
 		os.Exit(1)
 	}
-	localAddr := conn.LocalAddr().(*net.UDPAddr)
-	host := strings.Split(localAddr.String(), ":")[0]
 	defer conn.Close()
 
-	var tracer stdopentracing.Tracer
-	{
-		if zip == "" {
-			tracer = stdopentracing.NoopTracer{}
-		} else {
-			logger := log.With(logger, "tracer", "Zipkin")
-			logger.Log("addr", zip)
-			collector, err := zipkin.NewHTTPCollector(
-				zip,
-				zipkin.HTTPLogger(logger),
-			)
-			if err != nil {
-				logger.Log("err", err)
-				os.Exit(1)
-			}
-			tracer, err = zipkin.NewTracer(
-				zipkin.NewRecorder(collector, false, fmt.Sprintf("%v:%v", host, port), ServiceName),
-			)
-			if err != nil {
-				logger.Log("err", err)
-				os.Exit(1)
-			}
-		}
-		stdopentracing.InitGlobalTracer(tracer)
-	}
 	dbconn := false
 	for !dbconn {
 		err := db.Init()
@@ -135,10 +99,10 @@ func main() {
 	}
 
 	// Endpoint domain.
-	endpoints := api.MakeEndpoints(service, tracer)
+	endpoints := api.MakeEndpoints(service)
 
 	// HTTP router
-	router := api.MakeHTTPHandler(endpoints, logger, tracer)
+	router := api.MakeHTTPHandler(endpoints, logger)
 
 	httpMiddleware := []commonMiddleware.Interface{
 		commonMiddleware.Instrument{

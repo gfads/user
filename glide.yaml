@@ -7,12 +7,9 @@ import:
   - log
   - metrics
   - metrics/prometheus
-  - tracing/opentracing
   - transport/http
   - circuitbreaker
 - package: github.com/gorilla/mux
-- package: github.com/opentracing/opentracing-go
-- package: github.com/openzipkin/zipkin-go-opentracing
 - package: github.com/prometheus/client_golang
   subpackages:
   - prometheus

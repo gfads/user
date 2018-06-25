@@ -8,10 +8,8 @@ import (
 	"context"
 
 	"github.com/go-kit/kit/endpoint"
-	"github.com/go-kit/kit/tracing/opentracing"
 	"github.com/microservices-demo/user/db"
 	"github.com/microservices-demo/user/users"
-	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
 // Endpoints collects the endpoints that comprise the Service.
@@ -30,28 +28,24 @@ type Endpoints struct {
 
 // MakeEndpoints returns an Endpoints structure, where each endpoint is
 // backed by the given service.
-func MakeEndpoints(s Service, tracer stdopentracing.Tracer) Endpoints {
+func MakeEndpoints(s Service) Endpoints {
 	return Endpoints{
-		LoginEndpoint:       opentracing.TraceServer(tracer, "GET /login")(MakeLoginEndpoint(s)),
-		RegisterEndpoint:    opentracing.TraceServer(tracer, "POST /register")(MakeRegisterEndpoint(s)),
-		HealthEndpoint:      opentracing.TraceServer(tracer, "GET /health")(MakeHealthEndpoint(s)),
-		UserGetEndpoint:     opentracing.TraceServer(tracer, "GET /customers")(MakeUserGetEndpoint(s)),
-		UserPostEndpoint:    opentracing.TraceServer(tracer, "POST /customers")(MakeUserPostEndpoint(s)),
-		AddressGetEndpoint:  opentracing.TraceServer(tracer, "GET /addresses")(MakeAddressGetEndpoint(s)),
-		AddressPostEndpoint: opentracing.TraceServer(tracer, "POST /addresses")(MakeAddressPostEndpoint(s)),
-		CardGetEndpoint:     opentracing.TraceServer(tracer, "GET /cards")(MakeCardGetEndpoint(s)),
-		DeleteEndpoint:      opentracing.TraceServer(tracer, "DELETE /")(MakeDeleteEndpoint(s)),
-		CardPostEndpoint:    opentracing.TraceServer(tracer, "POST /cards")(MakeCardPostEndpoint(s)),
+		LoginEndpoint:       MakeLoginEndpoint(s),
+		RegisterEndpoint:    MakeRegisterEndpoint(s),
+		HealthEndpoint:      MakeHealthEndpoint(s),
+		UserGetEndpoint:     MakeUserGetEndpoint(s),
+		UserPostEndpoint:    MakeUserPostEndpoint(s),
+		AddressGetEndpoint:  MakeAddressGetEndpoint(s),
+		AddressPostEndpoint: MakeAddressPostEndpoint(s),
+		CardGetEndpoint:     MakeCardGetEndpoint(s),
+		DeleteEndpoint:      MakeDeleteEndpoint(s),
+		CardPostEndpoint:    MakeCardPostEndpoint(s),
 	}
 }
 
 // MakeLoginEndpoint returns an endpoint via the given service.
 func MakeLoginEndpoint(s Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		var span stdopentracing.Span
-		span, ctx = stdopentracing.StartSpanFromContext(ctx, "login user")
-		span.SetTag("service", "user")
-		defer span.Finish()
 		req := request.(loginRequest)
 		u, err := s.Login(req.Username, req.Password)
 		return userResponse{User: u}, err
@@ -61,10 +55,6 @@ func MakeLoginEndpoint(s Service) endpoint.Endpoint {
 // MakeRegisterEndpoint returns an endpoint via the given service.
 func MakeRegisterEndpoint(s Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		var span stdopentracing.Span
-		span, ctx = stdopentracing.StartSpanFromContext(ctx, "register user")
-		span.SetTag("service", "user")
-		defer span.Finish()
 		req := request.(registerRequest)
 		id, err := s.Register(req.Username, req.Password, req.Email, req.FirstName, req.LastName)
 		return postResponse{ID: id}, err
@@ -74,16 +64,9 @@ func MakeRegisterEndpoint(s Service) endpoint.Endpoint {
 // MakeUserGetEndpoint returns an endpoint via the given service.
 func MakeUserGetEndpoint(s Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		var span stdopentracing.Span
-		span, ctx = stdopentracing.StartSpanFromContext(ctx, "get users")
-		span.SetTag("service", "user")
-		defer span.Finish()
-
 		req := request.(GetRequest)
 
-		userspan := stdopentracing.StartSpan("users from db", stdopentracing.ChildOf(span.Context()))
 		usrs, err := s.GetUsers(req.ID)
-		userspan.Finish()
 		if req.ID == "" {
 			return EmbedStruct{usersResponse{Users: usrs}}, err
 		}
@@ -97,9 +80,7 @@ func MakeUserGetEndpoint(s Service) endpoint.Endpoint {
 			return users.User{}, err
 		}
 		user := usrs[0]
-		attrspan := stdopentracing.StartSpan("attributes from db", stdopentracing.ChildOf(span.Context()))
 		db.GetUserAttributes(&user)
-		attrspan.Finish()
 		if req.Attr == "addresses" {
 			return EmbedStruct{addressesResponse{Addresses: user.Addresses}}, err
 		}
@@ -113,10 +94,6 @@ func MakeUserGetEndpoint(s Service) endpoint.Endpoint {
 // MakeUserPostEndpoint returns an endpoint via the given service.
 func MakeUserPostEndpoint(s Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		var span stdopentracing.Span
-		span, ctx = stdopentracing.StartSpanFromContext(ctx, "post user")
-		span.SetTag("service", "user")
-		defer span.Finish()
 		req := request.(users.User)
 		id, err := s.PostUser(req)
 		return postResponse{ID: id}, err
@@ -126,14 +103,8 @@ func MakeUserPostEndpoint(s Service) endpoint.Endpoint {
 // MakeAddressGetEndpoint returns an endpoint via the given service.
 func MakeAddressGetEndpoint(s Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		var span stdopentracing.Span
-		span, ctx = stdopentracing.StartSpanFromContext(ctx, "get users")
-		span.SetTag("service", "user")
-		defer span.Finish()
 		req := request.(GetRequest)
-		addrspan := stdopentracing.StartSpan("addresses from db", stdopentracing.ChildOf(span.Context()))
 		adds, err := s.GetAddresses(req.ID)
-		addrspan.Finish()
 		if req.ID == "" {
 			return EmbedStruct{addressesResponse{Addresses: adds}}, err
 		}
@@ -147,10 +118,6 @@ func MakeAddressGetEndpoint(s Service) endpoint.Endpoint {
 // MakeAddressPostEndpoint returns an endpoint via the given service.
 func MakeAddressPostEndpoint(s Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		var span stdopentracing.Span
-		span, ctx = stdopentracing.StartSpanFromContext(ctx, "post address")
-		span.SetTag("service", "user")
-		defer span.Finish()
 		req := request.(addressPostRequest)
 		id, err := s.PostAddress(req.Address, req.UserID)
 		return postResponse{ID: id}, err
@@ -160,14 +127,8 @@ func MakeAddressPostEndpoint(s Service) endpoint.Endpoint {
 // MakeUserGetEndpoint returns an endpoint via the given service.
 func MakeCardGetEndpoint(s Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		var span stdopentracing.Span
-		span, ctx = stdopentracing.StartSpanFromContext(ctx, "get cards")
-		span.SetTag("service", "user")
-		defer span.Finish()
 		req := request.(GetRequest)
-		cardspan := stdopentracing.StartSpan("addresses from db", stdopentracing.ChildOf(span.Context()))
 		cards, err := s.GetCards(req.ID)
-		cardspan.Finish()
 		if req.ID == "" {
 			return EmbedStruct{cardsResponse{Cards: cards}}, err
 		}
@@ -181,10 +142,6 @@ func MakeCardGetEndpoint(s Service) endpoint.Endpoint {
 // MakeCardPostEndpoint returns an endpoint via the given service.
 func MakeCardPostEndpoint(s Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		var span stdopentracing.Span
-		span, ctx = stdopentracing.StartSpanFromContext(ctx, "post card")
-		span.SetTag("service", "user")
-		defer span.Finish()
 		req := request.(cardPostRequest)
 		id, err := s.PostCard(req.Card, req.UserID)
 		return postResponse{ID: id}, err
@@ -194,10 +151,6 @@ func MakeCardPostEndpoint(s Service) endpoint.Endpoint {
 // MakeLoginEndpoint returns an endpoint via the given service.
 func MakeDeleteEndpoint(s Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		var span stdopentracing.Span
-		span, ctx = stdopentracing.StartSpanFromContext(ctx, "delete entity")
-		span.SetTag("service", "user")
-		defer span.Finish()
 		req := request.(deleteRequest)
 		err = s.Delete(req.Entity, req.ID)
 		if err == nil {
@@ -210,10 +163,6 @@ func MakeDeleteEndpoint(s Service) endpoint.Endpoint {
 // MakeHealthEndpoint returns current health of the given service.
 func MakeHealthEndpoint(s Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		var span stdopentracing.Span
-		span, ctx = stdopentracing.StartSpanFromContext(ctx, "health check")
-		span.SetTag("service", "user")
-		defer span.Finish()
 		health := s.Health()
 		return healthResponse{Health: health}, nil
 	}
