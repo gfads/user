@@ -9,16 +9,20 @@ RUN apk add git
 RUN go get -v github.com/Masterminds/glide 
 RUN glide install
 
+RUN apk add --update gcc musl-dev
+
 COPY . /go/src/github.com/microservices-demo/user/
 
-RUN CGO_ENABLED=0 go build -a -installsuffix cgo -o /user main.go
+#RUN CGO_ENABLED=0 go build -a -installsuffix cgo -o /user main.go
+#RUN CGO_ENABLED=1 go build -a -installsuffix cgo -o /user main.go
+RUN CGO_ENABLED=0 go build -a -linkshared -installsuffix cgo -o /user main.go
 
 FROM alpine:3.4
 
 RUN apk add --update gcc musl-dev linux-headers
 COPY rbinder.c rbinder.c
 COPY uthash.h uthash.h
-RUN gcc -o rbinder rbinder.c
+RUN gcc -fPIC -shared -o rbinder.so rbinder.c -ldl
 
 ENV	SERVICE_USER=myuser \
 	SERVICE_UID=10001 \
@@ -41,7 +45,8 @@ RUN	chmod +x /user && \
 	chown -R ${SERVICE_USER}:${SERVICE_GROUP} /user && \
 	setcap 'cap_net_bind_service=+ep' /user
 
-USER ${SERVICE_USER}
+#USER ${SERVICE_USER}
 
-CMD ["./rbinder", "/user", "-port=8080"]
+ENV LD_PRELOAD /rbinder.so
+CMD ["/user", "-port=8080"]
 #CMD ["/user", "-port=80"]
